@@ -1,6 +1,8 @@
 # seqx-cli Skill
 
-`seqx` 是面向 Agent 工作流的序列处理 CLI，优先使用流式处理，支持 FASTA/FASTQ 与 gzip 输入。
+`seqx` is a sequence-processing CLI designed for agent workflows.
+
+It prioritizes streaming execution and supports FASTA/FASTQ (including `.gz` input).
 
 ## Installation
 
@@ -8,15 +10,15 @@
 cargo build --release
 ```
 
-二进制位于 `target/release/seqx`。
+Binary path: `target/release/seqx`.
 
-## 当前能力摘要
+## Current Capability Summary
 
-- 读取层：`RecordReader` 使用 noodles（FASTA/FASTQ）。
-- 低内存大文件：`sort` 外部排序、`split --parts` 双遍、`dedup` 分桶稳定归并。
-- 临时记录：`packed_seq_io`（DNA 2-bit packed，蛋白回退原文）。
-- 并行：`sort` 分块排序、`dedup` 桶内去重与 `search` 生产者-消费者流水线均支持多线程。
-- 蛋白支持：所有子命令可处理蛋白 FASTA；核酸专属能力有显式保护。
+- Parsing layer: `RecordReader` uses `noodles` for FASTA/FASTQ.
+- Large-file strategy: external `sort`, two-pass `split --parts`, bucketed stable `dedup`.
+- Temp records: `packed_seq_io` (2-bit packed for A/C/G/T; fallback for non-ACGT text).
+- Parallel paths: multi-threaded `sort`, `dedup`, and `search` (`--threads`).
+- Protein support: all commands can process protein FASTA; nucleotide-only operations are guarded.
 
 ## Core Commands
 
@@ -42,7 +44,7 @@ seqx filter -i input.fa --pattern "ATG.*TAA"
 seqx filter -i input.fa --id-file ids.txt
 ```
 
-> 注意：`--gc-min/--gc-max` 仅核酸序列可用，蛋白输入会报错。
+Note: `--gc-min/--gc-max` is nucleotide-only and errors on non-nucleotide records.
 
 ### Extraction
 ```bash
@@ -60,7 +62,7 @@ seqx search -i input.fa "ATG" --bed
 seqx search -i input.fa "ATG" --threads 8
 ```
 
-> 注意：反向互补搜索仅在“模式 + 序列”均为核酸时启用；蛋白只做正向。
+Note: reverse-complement matching is enabled only when both pattern and record are nucleotide-like.
 
 ### Sequence Modification
 ```bash
@@ -70,7 +72,7 @@ seqx modify -i input.fa --slice 1:100
 seqx modify -i input.fa --remove-gaps
 ```
 
-> 注意：`--reverse-complement` 仅核酸可用，蛋白输入会报错。
+Note: `--reverse-complement` is nucleotide-only and errors on non-nucleotide records.
 
 ### Sampling
 ```bash
@@ -114,31 +116,30 @@ seqx split -i input.fa --by-id
 
 ### Pipeline Usage
 ```bash
-# 过滤长读长 -> 转换 -> 抽样
-seqx filter -i reads.fq --min-len 1000 | seqx convert - -T fasta | seqx sample - -n 100
+# Filter long reads -> convert -> sample
+seqx filter -i reads.fq --min-len 1000 | seqx convert -T fasta | seqx sample -n 100
 
-# BED 提取后做反向互补
-seqx extract -i genome.fa --bed regions.bed | seqx modify - --reverse-complement > out.fa
+# Extract BED regions then reverse-complement
+seqx extract -i genome.fa --bed regions.bed | seqx modify --reverse-complement > out.fa
 ```
 
 ### Parameter Reference
-- `-i, --input`: 输入文件（默认 stdin）
-- `-o, --output`: 输出文件（默认 stdout）
-- `-f, --format`: 强制输入格式（auto/fasta/fastq）
-- `-w, --line-width`: FASTA 行宽（默认 80）
+- `-i, --input`: input file (default `stdin`)
+- `-o, --output`: output file (default `stdout`)
+- `-f, --format`: force input format (`auto/fasta/fastq`)
+- `-w, --line-width`: FASTA line width (default `80`)
 
 ## Format Auto-Detection
 
-按扩展名自动识别：
+Automatic detection is extension-based:
 - `.fa`, `.fasta` -> FASTA
 - `.fq`, `.fastq` -> FASTQ
-- `.gz` -> 自动解压
+- `.gz` -> transparent gzip decompression
 
 ## Tips
 
-- 输入建议使用 `-i`（而非位置参数），便于脚本化。
-- 多步处理优先用管道，减少中间文件。
-- 大文件排序优先设置 `sort --max-memory`，并按机器核心数设置 `sort --threads`。
-- 大文件去重优先设置 `dedup --buckets`，并按机器核心数设置 `dedup --threads`。
-- 大文件搜索可设置 `search --threads`（默认 `1`）提升吞吐。
-- 当前基线测试：`cargo test` 19/19 通过。
+- Prefer `-i` for script-friendly usage (except `merge`, which takes positional inputs).
+- Prefer pipelines for multi-step workflows to avoid intermediate files.
+- For large sorts, set `sort --max-memory` and tune `sort --threads`.
+- For large dedup jobs, tune `dedup --buckets` and `dedup --threads`.
+- For heavy search workloads, tune `search --threads` (default `1`).
