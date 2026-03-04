@@ -15,7 +15,7 @@ cargo build --release
 - 读取层：`RecordReader` 使用 noodles（FASTA/FASTQ）。
 - 低内存大文件：`sort` 外部排序、`split --parts` 双遍、`dedup` 分桶稳定归并。
 - 临时记录：`packed_seq_io`（DNA 2-bit packed，蛋白回退原文）。
-- 并行：`sort` 分块排序和 `search` 正/反链匹配使用 rayon。
+- 并行：`sort` 分块排序、`dedup` 桶内去重与 `search` 生产者-消费者流水线均支持多线程。
 - 蛋白支持：所有子命令可处理蛋白 FASTA；核酸专属能力有显式保护。
 
 ## Core Commands
@@ -57,6 +57,7 @@ seqx search -i input.fa "ATG"
 seqx search -i input.fa "ATG.*TAA" --regex
 seqx search -i input.fa "CGTA" --strand
 seqx search -i input.fa "ATG" --bed
+seqx search -i input.fa "ATG" --threads 8
 ```
 
 > 注意：反向互补搜索仅在“模式 + 序列”均为核酸时启用；蛋白只做正向。
@@ -93,6 +94,7 @@ seqx dedup -i input.fa
 seqx dedup -i input.fa --by-id
 seqx dedup -i input.fa --prefix 10
 seqx dedup -i input.fa --buckets 256
+seqx dedup -i input.fa --buckets 256 --threads 8
 ```
 
 ### Merging
@@ -137,5 +139,6 @@ seqx extract -i genome.fa --bed regions.bed | seqx modify - --reverse-complement
 - 输入建议使用 `-i`（而非位置参数），便于脚本化。
 - 多步处理优先用管道，减少中间文件。
 - 大文件排序优先设置 `sort --max-memory`，并按机器核心数设置 `sort --threads`。
-- 大文件去重优先设置 `dedup --buckets`。
+- 大文件去重优先设置 `dedup --buckets`，并按机器核心数设置 `dedup --threads`。
+- 大文件搜索可设置 `search --threads`（默认 `1`）提升吞吐。
 - 当前基线测试：`cargo test` 19/19 通过。

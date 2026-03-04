@@ -49,9 +49,9 @@ pub struct Args {
     #[arg(short = 'm', long)]
     pub max_memory: Option<usize>,
 
-    /// Number of threads used by sort (default: Rayon global thread count)
-    #[arg(short = 't', long)]
-    pub threads: Option<usize>,
+    /// Number of threads used by sort
+    #[arg(short = 't', long, default_value_t = 1)]
+    pub threads: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -267,24 +267,16 @@ fn input_file_size(path: Option<&str>) -> Option<usize> {
 pub fn run(args: Args) -> anyhow::Result<()> {
     let format = detect_format(args.input.as_deref(), args.format.as_deref());
 
-    if let Some(threads) = args.threads
-        && threads == 0
-    {
+    if args.threads == 0 {
         return Err(anyhow::anyhow!("--threads must be greater than 0"));
     }
 
-    let sort_pool = if let Some(threads) = args.threads {
-        Some(
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(threads)
-                .build()?,
-        )
-    } else {
-        None
-    };
+    let sort_pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(args.threads)
+        .build()?;
 
     let max_memory_mb = args.max_memory.unwrap_or(256).max(8);
-    let rayon_threads = args.threads.unwrap_or_else(rayon::current_num_threads);
+    let rayon_threads = args.threads;
     let max_chunk_bytes = choose_chunk_bytes(max_memory_mb, rayon_threads);
     let sort_key = detect_sort_key(&args);
 
@@ -299,23 +291,15 @@ pub fn run(args: Args) -> anyhow::Result<()> {
 
         if chunk_bytes >= max_chunk_bytes {
             let records = std::mem::take(&mut chunk_records);
-            if let Some(pool) = &sort_pool {
-                pool.install(|| spill_sorted_chunk(records, sort_key, args.desc, &mut temp_files))?;
-            } else {
-                spill_sorted_chunk(records, sort_key, args.desc, &mut temp_files)?;
-            }
+            sort_pool
+                .install(|| spill_sorted_chunk(records, sort_key, args.desc, &mut temp_files))?;
             chunk_bytes = 0;
         }
     }
 
     if !chunk_records.is_empty() {
-        if let Some(pool) = &sort_pool {
-            pool.install(|| {
-                spill_sorted_chunk(chunk_records, sort_key, args.desc, &mut temp_files)
-            })?;
-        } else {
-            spill_sorted_chunk(chunk_records, sort_key, args.desc, &mut temp_files)?;
-        }
+        sort_pool
+            .install(|| spill_sorted_chunk(chunk_records, sort_key, args.desc, &mut temp_files))?;
     }
 
     if temp_files.is_empty() {
@@ -380,7 +364,7 @@ mod tests {
             desc: false,
             line_width: 80,
             max_memory: Some(1),
-            threads: None,
+            threads: 1,
         })
         .unwrap();
 
@@ -411,7 +395,7 @@ mod tests {
             desc: true,
             line_width: 80,
             max_memory: Some(1),
-            threads: None,
+            threads: 1,
         })
         .unwrap();
 

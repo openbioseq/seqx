@@ -1,10 +1,14 @@
-use std::io::Write;
+use std::{
+    collections::BTreeMap,
+    io::Write,
+    sync::{Arc, Mutex, mpsc},
+    thread,
+};
 
 use clap::Parser;
-use rayon::join;
 use regex::Regex;
 
-use crate::common::RecordReader;
+use crate::common::{Record, RecordReader};
 
 #[derive(Parser)]
 #[command(about = "Search patterns in sequences")]
@@ -36,6 +40,31 @@ pub struct Args {
     /// Allow mismatches (approximate matching)
     #[arg(short, long, default_value = "0")]
     pub mismatches: usize,
+
+    /// Number of worker threads used by search
+    #[arg(short = 't', long, default_value_t = 1)]
+    pub threads: usize,
+}
+
+#[derive(Clone)]
+struct SearchConfig {
+    pattern: String,
+    regex: Option<Regex>,
+    bed: bool,
+    strand: bool,
+    mismatches: usize,
+    pattern_rc: String,
+    pattern_is_nucleotide: bool,
+}
+
+struct SearchJob {
+    index: u64,
+    record: Record,
+}
+
+struct SearchResult {
+    index: u64,
+    lines: Vec<String>,
 }
 
 fn reverse_complement(seq: &str) -> String {
@@ -104,8 +133,7 @@ fn find_matches(
     matches
 }
 
-fn write_match(
-    writer: &mut dyn Write,
+fn format_match(
     id: &str,
     start: usize,
     end: usize,
@@ -113,32 +141,50 @@ fn write_match(
     is_bed: bool,
     has_strand: bool,
     strand: &str,
-) -> anyhow::Result<()> {
+) -> String {
     if is_bed {
         if has_strand {
-            writeln!(
-                writer,
-                "{}\t{}\t{}\t{}\t0\t{}",
-                id, start, end, matched, strand
-            )?;
+            format!("{}\t{}\t{}\t{}\t0\t{}", id, start, end, matched, strand)
         } else {
-            writeln!(writer, "{}\t{}\t{}\t{}", id, start, end, matched)?;
+            format!("{}\t{}\t{}\t{}", id, start, end, matched)
         }
     } else {
-        writeln!(
-            writer,
-            "{}:{}-{}\t{}\t{}",
-            id,
-            start + 1,
-            end,
-            matched,
-            strand
-        )?;
+        format!("{}:{}-{}\t{}\t{}", id, start + 1, end, matched, strand)
     }
-    Ok(())
+}
+
+fn search_record(record: &Record, cfg: &SearchConfig) -> Vec<String> {
+    let allow_rc = cfg.regex.is_none()
+        && !cfg.pattern_rc.is_empty()
+        && cfg.pattern_is_nucleotide
+        && record.is_nucleotide_sequence();
+
+    let mut lines = Vec::new();
+
+    let forward_matches = find_matches(&record.seq, &cfg.pattern, &cfg.regex, cfg.mismatches);
+    for (start, end, matched) in forward_matches {
+        lines.push(format_match(
+            &record.id, start, end, &matched, cfg.bed, cfg.strand, "+",
+        ));
+    }
+
+    if allow_rc {
+        let rc_matches = find_matches(&record.seq, &cfg.pattern_rc, &None, cfg.mismatches);
+        for (start, end, matched) in rc_matches {
+            lines.push(format_match(
+                &record.id, start, end, &matched, cfg.bed, cfg.strand, "-",
+            ));
+        }
+    }
+
+    lines
 }
 
 pub fn run(args: Args) -> anyhow::Result<()> {
+    if args.threads == 0 {
+        return Err(anyhow::anyhow!("--threads must be greater than 0"));
+    }
+
     let regex = if args.regex {
         Some(Regex::new(&args.pattern)?)
     } else {
@@ -156,57 +202,94 @@ pub fn run(args: Args) -> anyhow::Result<()> {
         None => Box::new(std::io::stdout()),
     };
 
-    let pattern_rc = if !args.regex {
-        reverse_complement(&args.pattern)
-    } else {
+    let pattern = args.pattern;
+    let pattern_is_nucleotide = is_nucleotide_text(&pattern);
+    let pattern_rc = if args.regex {
         String::new()
+    } else {
+        reverse_complement(&pattern)
     };
-    let pattern_is_nucleotide = is_nucleotide_text(&args.pattern);
 
-    // 流式处理
+    let cfg = SearchConfig {
+        pattern,
+        regex,
+        bed: args.bed,
+        strand: args.strand,
+        mismatches: args.mismatches,
+        pattern_rc,
+        pattern_is_nucleotide,
+    };
+
+    let (job_tx, job_rx) = mpsc::channel::<Option<SearchJob>>();
+    let (result_tx, result_rx) = mpsc::channel::<SearchResult>();
+    let job_rx = Arc::new(Mutex::new(job_rx));
+    let cfg = Arc::new(cfg);
+
+    let mut workers = Vec::with_capacity(args.threads);
+    for _ in 0..args.threads {
+        let rx = Arc::clone(&job_rx);
+        let tx = result_tx.clone();
+        let cfg = Arc::clone(&cfg);
+        workers.push(thread::spawn(move || {
+            loop {
+                let message = {
+                    let guard = rx.lock().expect("search job receiver mutex poisoned");
+                    guard.recv()
+                };
+
+                match message {
+                    Ok(Some(job)) => {
+                        let lines = search_record(&job.record, &cfg);
+                        if tx
+                            .send(SearchResult {
+                                index: job.index,
+                                lines,
+                            })
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Ok(None) | Err(_) => break,
+                }
+            }
+        }));
+    }
+    drop(result_tx);
+
+    let mut produced = 0u64;
     while let Some(record) = reader.next_record()? {
-        let allow_rc = !args.regex
-            && !pattern_rc.is_empty()
-            && pattern_is_nucleotide
-            && record.is_nucleotide_sequence();
+        job_tx.send(Some(SearchJob {
+            index: produced,
+            record,
+        }))?;
+        produced += 1;
+    }
 
-        let (forward_matches, rc_matches) = if allow_rc {
-            join(
-                || find_matches(&record.seq, &args.pattern, &regex, args.mismatches),
-                || find_matches(&record.seq, &pattern_rc, &None, args.mismatches),
-            )
-        } else {
-            (
-                find_matches(&record.seq, &args.pattern, &regex, args.mismatches),
-                Vec::new(),
-            )
-        };
+    for _ in 0..args.threads {
+        let _ = job_tx.send(None);
+    }
+    drop(job_tx);
 
-        for (start, end, matched) in forward_matches {
-            write_match(
-                &mut writer,
-                &record.id,
-                start,
-                end,
-                &matched,
-                args.bed,
-                args.strand,
-                "+",
-            )?;
+    let mut next_index = 0u64;
+    let mut received = 0u64;
+    let mut pending: BTreeMap<u64, Vec<String>> = BTreeMap::new();
+
+    while received < produced {
+        let result = result_rx.recv()?;
+        pending.insert(result.index, result.lines);
+        received += 1;
+
+        while let Some(lines) = pending.remove(&next_index) {
+            for line in lines {
+                writeln!(writer, "{}", line)?;
+            }
+            next_index += 1;
         }
+    }
 
-        for (start, end, matched) in rc_matches {
-            write_match(
-                &mut writer,
-                &record.id,
-                start,
-                end,
-                &matched,
-                args.bed,
-                args.strand,
-                "-",
-            )?;
-        }
+    for worker in workers {
+        let _ = worker.join();
     }
 
     Ok(())
@@ -236,6 +319,7 @@ mod tests {
             bed: false,
             strand: true,
             mismatches: 0,
+            threads: 1,
         })
         .unwrap();
 

@@ -211,7 +211,7 @@ cargo run -- filter -i test.fa --min-len 15
 - 大文件：`sort` 外部排序、`split --parts` 双遍、`extract` 单遍流式。
 - 去重：`dedup` 分桶落盘 + 稳定归并，低内存。
 - 临时记录：`packed_seq_io` 统一编码（DNA 2-bit，蛋白回退）。
-- 并行：`sort` 分块排序与 `search` 正/反链匹配使用 `rayon`；`sort` 可用 `--threads` 指定线程数。
+- 并行：`sort` 分块排序、`dedup` 桶内去重与 `search` 生产者-消费者流水线匹配均支持多线程；`sort`/`dedup`/`search` 可用 `--threads` 指定线程数（默认 `1`）。
 - 现状：测试基线 `cargo test` 为 19/19 通过。
 
 ## sort 线程参数
@@ -219,4 +219,21 @@ cargo run -- filter -i test.fa --min-len 15
 ```bash
 seqx sort -i input.fa --by-name --threads 8
 seqx sort -i input.fa --by-len --desc --max-memory 256 --threads 16
+# 不传 --threads 时默认 1（单线程）
+```
+
+## dedup 线程参数
+
+```bash
+seqx dedup -i input.fa --buckets 128 --threads 8
+seqx dedup -i input.fa --by-id --buckets 256 --threads 16
+# 不传 --threads 时默认 1（单线程）
+```
+
+## search 线程参数
+
+```bash
+seqx search -i input.fa "ATG" --threads 8
+seqx search -i input.fa "ATG.*TAA" --regex --threads 4
+# 不传 --threads 时默认 1（单线程）
 ```

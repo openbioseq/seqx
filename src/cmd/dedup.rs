@@ -8,6 +8,7 @@ use std::{
 };
 
 use clap::Parser;
+use rayon::prelude::*;
 use tempfile::tempdir;
 
 use crate::common::{
@@ -49,6 +50,10 @@ pub struct Args {
     /// Number of disk partitions for low-memory deduplication
     #[arg(long, default_value = "128")]
     pub buckets: usize,
+
+    /// Number of threads used by bucket dedup
+    #[arg(short = 't', long, default_value_t = 1)]
+    pub threads: usize,
 }
 
 #[derive(Clone)]
@@ -126,31 +131,47 @@ fn dedup_each_bucket(
     args: &Args,
     base_dir: &Path,
     buckets: usize,
+    thread_pool: &rayon::ThreadPool,
 ) -> anyhow::Result<(Vec<PathBuf>, u64)> {
+    let worker = || -> anyhow::Result<Vec<(usize, PathBuf, u64)>> {
+        (0..buckets)
+            .into_par_iter()
+            .map(|idx| {
+                let source = bucket_path(base_dir, "partition", idx);
+                let target = bucket_path(base_dir, "unique", idx);
+
+                let mut reader = BufReader::new(File::open(source)?);
+                let mut writer = BufWriter::new(File::create(&target)?);
+                let mut seen = HashSet::new();
+                let mut unique_count = 0u64;
+
+                while let Some(temp_record) = read_temp_record(&mut reader)? {
+                    let key =
+                        temp_record
+                            .record
+                            .dedup_key(args.by_id, args.prefix, args.ignore_case);
+
+                    if seen.insert(key) {
+                        write_temp_record(&mut writer, &temp_record)?;
+                        unique_count += 1;
+                    }
+                }
+
+                writer.flush()?;
+                Ok((idx, target, unique_count))
+            })
+            .collect()
+    };
+
+    let mut per_bucket = thread_pool.install(worker)?;
+
+    per_bucket.sort_by_key(|(idx, _, _)| *idx);
+
     let mut unique_paths = Vec::with_capacity(buckets);
     let mut unique_total = 0u64;
-
-    for idx in 0..buckets {
-        let source = bucket_path(base_dir, "partition", idx);
-        let target = bucket_path(base_dir, "unique", idx);
-
-        let mut reader = BufReader::new(File::open(source)?);
-        let mut writer = BufWriter::new(File::create(&target)?);
-        let mut seen = HashSet::new();
-
-        while let Some(temp_record) = read_temp_record(&mut reader)? {
-            let key = temp_record
-                .record
-                .dedup_key(args.by_id, args.prefix, args.ignore_case);
-
-            if seen.insert(key) {
-                write_temp_record(&mut writer, &temp_record)?;
-                unique_total += 1;
-            }
-        }
-
-        writer.flush()?;
-        unique_paths.push(target);
+    for (_, path, count) in per_bucket {
+        unique_paths.push(path);
+        unique_total += count;
     }
 
     Ok((unique_paths, unique_total))
@@ -198,10 +219,21 @@ pub fn run(args: Args) -> anyhow::Result<()> {
     let format = detect_format(args.input.as_deref(), args.format.as_deref());
     let buckets = args.buckets.max(2);
 
+    if args.threads == 0 {
+        return Err(anyhow::anyhow!("--threads must be greater than 0"));
+    }
+
+    let dedup_pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(args.threads)
+        .build()?;
+
+    let rayon_threads = args.threads;
+
     let temp_dir = tempdir()?;
 
     let (_, total) = partition_to_disk(&args, format, temp_dir.path(), buckets)?;
-    let (unique_paths, unique_total) = dedup_each_bucket(&args, temp_dir.path(), buckets)?;
+    let (unique_paths, unique_total) =
+        dedup_each_bucket(&args, temp_dir.path(), buckets, &dedup_pool)?;
     merge_unique_buckets(
         &unique_paths,
         args.output.as_deref(),
@@ -211,8 +243,8 @@ pub fn run(args: Args) -> anyhow::Result<()> {
 
     let removed = total.saturating_sub(unique_total);
     eprintln!(
-        "Deduplicated: {}/{} unique sequences ({} removed, {} buckets)",
-        unique_total, total, removed, buckets
+        "Deduplicated: {}/{} unique sequences ({} removed, {} buckets, rayon threads {})",
+        unique_total, total, removed, buckets, rayon_threads
     );
 
     Ok(())
@@ -243,6 +275,7 @@ mod tests {
             ignore_case: false,
             line_width: 80,
             buckets: 4,
+            threads: 1,
         })
         .unwrap();
 
@@ -272,6 +305,7 @@ mod tests {
             ignore_case: false,
             line_width: 80,
             buckets: 2,
+            threads: 1,
         })
         .unwrap();
 
@@ -305,6 +339,7 @@ mod tests {
             ignore_case: false,
             line_width: 80,
             buckets: 8,
+            threads: 1,
         })
         .unwrap();
 

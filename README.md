@@ -82,6 +82,7 @@ seqx extract input.fa --bed regions.bed         # 按BED提取
 seqx search input.fa "ATG"                      # 简单搜索
 seqx search input.fa "ATG.*TAA" --regex         # 正则搜索
 seqx search input.fa --bed motifs.bed           # BED格式输出
+seqx search input.fa "ATG" --threads 8          # 指定搜索线程数
 ```
 
 ### 6. modify - 序列修改
@@ -110,6 +111,7 @@ seqx sample input.fa -n 100 --seed 42           # 指定随机种子
 seqx sort input.fa --by-name                    # 按名称排序
 seqx sort input.fa --by-len --desc              # 按长度降序
 seqx sort input.fa --by-gc                      # 按GC含量
+seqx sort input.fa --by-name                    # 默认 --threads=1（单线程）
 seqx sort input.fa --by-name --max-memory 128   # 外部流式排序，内存上限128MB
 seqx sort input.fa --by-name --threads 8        # 指定排序线程数
 ```
@@ -121,7 +123,9 @@ seqx sort input.fa --by-name --threads 8        # 指定排序线程数
 seqx dedup input.fa                             # 按序列去重
 seqx dedup input.fa --by-id                     # 按ID去重
 seqx dedup input.fa --prefix 10                 # 按前10bp去重
+seqx dedup input.fa --buckets 128               # 默认 --threads=1（单线程）
 seqx dedup input.fa --by-id --buckets 256       # 低内存磁盘分桶去重
+seqx dedup input.fa --buckets 256 --threads 8   # 指定分桶去重线程数
 ```
 
 ### 10. merge - 合并文件
@@ -173,11 +177,11 @@ seqx split input.fa --by-id --prefix out_       # 按ID分割
 
 ## 内存与并行策略
 
-- `sort` 使用外部流式排序（分块 + 临时文件 + 多路归并），支持 `--max-memory` 控制块内存目标，支持 `--threads` 指定排序线程数。
+- `sort` 使用外部流式排序（分块 + 临时文件 + 多路归并），支持 `--max-memory` 控制块内存目标，支持 `--threads` 指定排序线程数（默认 `1`）。
 - `split --parts` 使用双遍流式扫描（必要时临时文件物化 stdin），避免全量驻留内存。
 - `extract`（含 `--bed` / `--id + --range`）统一单次扫描流式提取。
-- `search` 的正链/反链匹配使用 `rayon` 并行执行。
-- `dedup` 使用磁盘分桶 + 桶内去重 + 按输入序号归并，显著降低唯一键集合带来的内存峰值。
+- `search` 使用生产者-消费者多线程流水线（读取/匹配/有序写出），支持 `--threads` 指定搜索线程数（默认 `1`）。
+- `dedup` 使用磁盘分桶 + 桶内去重 + 按输入序号归并，显著降低唯一键集合带来的内存峰值，并支持 `--threads` 指定桶内去重线程数（默认 `1`）。
 - 所有临时落盘记录中的序列字段优先使用 `packed-seq` 2-bit 编码（ACGT），减少磁盘 I/O 体积与读取时间。
 
 ## 示例工作流

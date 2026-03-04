@@ -75,7 +75,7 @@ time_cmd() {
 }
 
 echo "[INFO] 运行 sort 基准..."
-SORT_MS=$(time_cmd "${SEQX_BIN}" sort -i "${INPUT_FA}" -o "${SORT_OUT}" --by-name --max-memory 64)
+SORT_MS=$(time_cmd "${SEQX_BIN}" sort -i "${INPUT_FA}" -o "${SORT_OUT}" --by-name --max-memory 64 --threads 8)
 
 echo "[INFO] 运行 dedup 基准..."
 DEDUP_MS=$(time_cmd "${SEQX_BIN}" dedup -i "${INPUT_FA}" -o "${DEDUP_OUT}" --buckets 128)
