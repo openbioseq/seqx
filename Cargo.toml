@@ -2,6 +2,10 @@
 name = "seqx"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/openbioseq/seqx"
+readme = "README.md"
+license = "MIT"
+description = "A command-line tool for processing and analyzing biological sequences."
 
 [dependencies]
 anyhow = "1.0.102"
