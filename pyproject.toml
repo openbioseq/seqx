@@ -5,7 +5,7 @@ build-backend = "maturin"
 
 [project]
 name = "seqx"
-version = "0.1.1"
+version = "0.1.2"
 description = "A command-line tool for processing and analyzing biological sequences."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -21,11 +21,5 @@ manifest-path = "Cargo.toml"
 module-name = "seqx"
 python-source = "python"
 strip = true
-exclude = [
-    "src/"
-]
-include = [
-    "pyproject.toml",
-    "README.md",
-    "LICENSE",
-]
+exclude = ["src/"]
+include = ["pyproject.toml", "README.md", "LICENSE"]
