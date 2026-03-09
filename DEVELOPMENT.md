@@ -17,8 +17,10 @@ seqx/
 │   ├── lib.rs
 │   ├── cmd/
 │   │   ├── mod.rs
+│   │   ├── compress.rs
 │   │   ├── convert.rs
 │   │   ├── dedup.rs
+│   │   ├── guide.rs
 │   │   ├── extract.rs
 │   │   ├── filter.rs
 │   │   ├── merge.rs
@@ -152,7 +154,7 @@ When non-nucleotide records are encountered in these paths, the command returns 
 - Most commands use `-i/--input`, `-o/--output`, `-f/--format`.
 - `convert` uses `-F/--from` and `-T/--to`.
 - `merge` takes positional input files: `seqx merge <INPUTS>...`.
-- Thread count is available in `search`, `sort`, and `dedup` via `-t/--threads`.
+- Thread count is available in `search`, `sort`, `dedup`, and `compress` via `-t/--threads`.
 
 ## Suggested Contribution Checklist
 

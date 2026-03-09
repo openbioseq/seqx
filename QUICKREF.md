@@ -15,7 +15,9 @@ seqx/
 │   ├── lib.rs
 │   ├── cmd/
 │   │   ├── mod.rs
+│   │   ├── compress.rs
 │   │   ├── convert.rs
+│   │   ├── guide.rs
 │   │   ├── dedup.rs
 │   │   ├── extract.rs
 │   │   ├── filter.rs
@@ -133,7 +135,7 @@ create_writer(path)?
 - Input/output pattern (most commands): `-i/--input`, `-o/--output`
 - Common format option: `-f/--format` (except `convert`, which uses `-F/--from` and `-T/--to`)
 - FASTA line width: `-w/--line-width`
-- Thread options where implemented: `-t/--threads` (`search`, `sort`, `dedup`)
+- Thread options where implemented: `-t/--threads` (`search`, `sort`, `dedup`, `compress`)
 
 ## Streaming Skeleton
 
@@ -176,4 +178,5 @@ cargo run -- filter -i test.fa --min-len 15
 - Parsing: streaming `RecordReader` backed by `noodles` for FASTA/FASTQ.
 - Large-file strategy: external sort, bucketed dedup, streaming split/extract/search.
 - Temp storage: binary packed format in `packed_seq_io` for lower I/O overhead.
-- Parallel paths: `search`, `sort`, and `dedup` expose `--threads` (default `1`).
+- Parallel paths: `search`, `sort`, `dedup`, and `compress` expose `--threads` (default `1` for search/sort/dedup, auto-detect for compress).
+- Compression: `compress` uses `pigz` if available, otherwise `gzp` for parallel gzip.

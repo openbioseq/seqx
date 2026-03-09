@@ -30,7 +30,8 @@ seqx/
 │   │   ├── search.rs
 │   │   ├── sort.rs
 │   │   ├── split.rs
-│   │   └── stats.rs
+│   │   ├── stats.rs
+│   │   └── guide.rs
 │   └── common/
 │       ├── mod.rs
 │       ├── parser.rs
@@ -65,6 +66,10 @@ target/release/seqx
 ```bash
 # Show help
 seqx --help
+
+# Show guide (agent-friendly help)
+seqx guide
+seqx guide filter
 
 # Basic stats
 seqx stats -i input.fa
@@ -189,6 +194,24 @@ cat input.fa.gz | seqx compress -d > output.fa
 seqx compress -i input.fa --no-pigz
 ```
 
+### `guide`
+
+```bash
+# List all commands
+seqx guide
+
+# Show detailed help for a specific command
+seqx guide filter
+seqx guide compress
+
+# Output in JSON format (for programmatic use)
+seqx guide --format json
+seqx guide filter --format json
+
+# Output in Markdown format
+seqx guide --format markdown
+```
+
 ## Behavior Notes
 
 - Input defaults to `stdin` where supported.
@@ -210,6 +233,7 @@ seqx compress -i input.fa --no-pigz
 - `sort`: external chunk sort + mmap merge, configurable with `--max-memory` and `--threads`.
 - `dedup`: disk bucket partitioning + per-bucket dedup + stable merge, configurable with `--buckets` and `--threads`.
 - `split --parts`: two-pass streaming split (stdin may be materialized to a temp file).
+- `compress`: uses `pigz` if available, otherwise uses `gzp` (parallel gzip in Rust) with automatic thread detection.
 - Temp binary record paths use `packed_seq_io` (2-bit packing for A/C/G/T when applicable).
 
 ## Bench Script
