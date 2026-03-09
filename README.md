@@ -4,62 +4,23 @@
 
 It is designed around streaming I/O, predictable command behavior, and low-memory execution for large files.
 
-## Repository Layout
+## Installation
 
-```text
-seqx/
-├── .github/
-│   └── workflows/
-│       └── release.yml
-├── scripts/
-│   ├── bench_packed_io.sh
-│   └── gen_random_fasta.py
-├── src/
-│   ├── main.rs
-│   ├── lib.rs
-│   ├── cmd/
-│   │   ├── mod.rs
-│   │   ├── compress.rs
-│   │   ├── convert.rs
-│   │   ├── dedup.rs
-│   │   ├── extract.rs
-│   │   ├── filter.rs
-│   │   ├── merge.rs
-│   │   ├── modify.rs
-│   │   ├── sample.rs
-│   │   ├── search.rs
-│   │   ├── sort.rs
-│   │   ├── split.rs
-│   │   ├── stats.rs
-│   │   └── guide.rs
-│   └── common/
-│       ├── mod.rs
-│       ├── parser.rs
-│       ├── packed_seq_io.rs
-│       ├── record.rs
-│       ├── writer.rs
-│       └── README.md
-├── Cargo.toml
-├── Cargo.lock
-├── README.md
-├── QUICKREF.md
-├── DEVELOPMENT.md
-├── SKILL.md
-├── rustfmt.toml
-└── target/                # build artifacts (generated)
-```
-
-## Build
+### pypi
 
 ```bash
-cargo build --release
+pip install seqx
 ```
 
-Binary path:
+### cargo
 
 ```bash
-target/release/seqx
+cargo install seqx
 ```
+
+### prebuilt binaries
+Prebuilt binaries for Linux and macOS are available on the [releases page](https://github.com/openbioseq/seqx/releases)
+
 
 ## Quick Start
 
