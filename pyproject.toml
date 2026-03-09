@@ -1,0 +1,31 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+
+[project]
+name = "seqx"
+version = "0.1.1"
+description = "A command-line tool for processing and analyzing biological sequences."
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
+
+[project.urls]
+homepage = "https://github.com/openbioseq/seqx"
+repository = "https://github.com/openbioseq/seqx"
+
+[tool.maturin]
+bindings = "bin"
+manifest-path = "Cargo.toml"
+module-name = "seqx"
+python-source = "python"
+strip = true
+exclude = [
+    "src/"
+]
+include = [
+    "pyproject.toml",
+    "README.md",
+    "LICENSE",
+]
