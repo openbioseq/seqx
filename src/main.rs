@@ -5,6 +5,8 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Guide(args) => seqx::cmd::guide::run(args),
+        Commands::Compress(args) => seqx::cmd::compress::run(args),
         Commands::Stats(args) => seqx::cmd::stats::run(args),
         Commands::Convert(args) => seqx::cmd::convert::run(args),
         Commands::Filter(args) => seqx::cmd::filter::run(args),

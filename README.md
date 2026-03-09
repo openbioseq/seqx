@@ -19,6 +19,7 @@ seqx/
 │   ├── lib.rs
 │   ├── cmd/
 │   │   ├── mod.rs
+│   │   ├── compress.rs
 │   │   ├── convert.rs
 │   │   ├── dedup.rs
 │   │   ├── extract.rs
@@ -167,6 +168,25 @@ seqx merge a.fa b.fa c.fa --add-prefix --sep ":" -o merged_with_source.fa
 seqx split -i input.fa --parts 10 -o out_dir
 seqx split -i input.fa --chunk-size 1000 -o out_dir
 seqx split -i input.fa --by-id -o out_dir --prefix seq
+```
+
+### `compress`
+
+```bash
+# Compress using pigz if available, otherwise built-in
+seqx compress -i input.fa
+seqx compress -i input.fa -o output.fa.gz -l 9
+
+# Decompress
+seqx compress -d -i input.fa.gz
+seqx compress -d -i input.fa.gz -o output.fa
+
+# Use stdin/stdout
+cat input.fa | seqx compress > output.fa.gz
+cat input.fa.gz | seqx compress -d > output.fa
+
+# Force built-in implementation
+seqx compress -i input.fa --no-pigz
 ```
 
 ## Behavior Notes

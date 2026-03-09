@@ -1,9 +1,11 @@
 use clap::{Parser, Subcommand};
 
+pub mod compress;
 pub mod convert;
 pub mod dedup;
 pub mod extract;
 pub mod filter;
+pub mod guide;
 pub mod merge;
 pub mod modify;
 pub mod sample;
@@ -14,7 +16,9 @@ pub mod stats;
 
 #[derive(Parser)]
 #[command(name = "seqx")]
-#[command(about = "Agent-friendly sequence processing tool")]
+#[command(
+    about = "Agent-friendly sequence processing tool. Use 'seqx guide' for more information."
+)]
 #[command(version)]
 pub struct Cli {
     #[command(subcommand)]
@@ -23,6 +27,10 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    /// Show guide information for agent usage
+    Guide(guide::Args),
+    /// Compress or decompress files
+    Compress(compress::Args),
     /// Statistics of sequences
     Stats(stats::Args),
     /// Convert sequence format
